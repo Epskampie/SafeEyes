@@ -32,12 +32,16 @@ class BreakScreen:
 
 	def __init__(self, on_skip, glade_file, style_sheet_path):
 		self.on_skip = on_skip
-		self.style_sheet = style_sheet_path
 		self.is_pretified = False
 		self.key_lock_condition = threading.Condition()
 		self.windows = []
 		self.count_labels = []
 		self.glade_file = glade_file
+
+		# Initialize the theme
+		css_provider = Gtk.CssProvider()
+		css_provider.load_from_path(style_sheet_path)
+		Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
 
 	"""
@@ -73,21 +77,21 @@ class BreakScreen:
 	"""
 	def block_keyboard(self):
 		logging.info("Lock the keyboard")
-		self.lock_keyboard = True
-		display = Display()
-		root = display.screen().root
-		# Grap the keyboard
-		root.grab_keyboard(owner_events = False, pointer_mode = X.GrabModeAsync, keyboard_mode = X.GrabModeAsync, time = X.CurrentTime)
-		# Consume keyboard events
-		self.key_lock_condition.acquire()
-		while self.lock_keyboard:
-			self.key_lock_condition.wait()
-		self.key_lock_condition.release()
+		# self.lock_keyboard = True
+		# display = Display()
+		# root = display.screen().root
+		# # Grap the keyboard
+		# root.grab_keyboard(owner_events = False, pointer_mode = X.GrabModeAsync, keyboard_mode = X.GrabModeAsync, time = X.CurrentTime)
+		# # Consume keyboard events
+		# self.key_lock_condition.acquire()
+		# while self.lock_keyboard:
+		# 	self.key_lock_condition.wait()
+		# self.key_lock_condition.release()
 		
-		# Ungrap the keyboard
-		logging.info("Unlock the keyboard")
-		display.ungrab_keyboard(X.CurrentTime)
-		display.flush()
+		# # Ungrap the keyboard
+		# logging.info("Unlock the keyboard")
+		# display.ungrab_keyboard(X.CurrentTime)
+		# display.flush()
 
 
 	"""
@@ -119,11 +123,15 @@ class BreakScreen:
 			self.windows.append(window)
 			self.count_labels.append(lbl_count)
 
+			# Set visual to apply css theme. It should be called before show method.
+			window.set_visual(window.get_screen().get_rgba_visual())
+
 			window.move(x, y)
 			window.stick()
-			window.set_keep_above(True)
+			# window.set_keep_above(True)
 			window.present()
 			window.fullscreen()
+			
 
 	def release_keyboard(self):
 		self.key_lock_condition.acquire()
@@ -138,14 +146,6 @@ class BreakScreen:
 
 		self.show_break_screen(message)
 
-		# Set style
-		logging.info("Apply style to the break screen")
-		css_provider = Gtk.CssProvider()
-		css_provider.load_from_path(self.style_sheet)
-		Gtk.StyleContext().add_provider_for_screen(Gdk.Screen.get_default(), css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-		signal.signal(signal.SIGINT, signal.SIG_DFL)
-		self.is_pretified = True
-
 
 	"""
 		Hide the break screen from active window and destroy all other windows
@@ -153,10 +153,12 @@ class BreakScreen:
 	def close(self):
 		logging.info("Close the break screen(s)")
 		self.release_keyboard()
-		# GLib.idle_add(lambda: self.window.hide())
 
 		# Destroy other windows if exists
+		GLib.idle_add(lambda: self.__close())
+
+	def __close(self):
 		for win in self.windows:
-			GLib.idle_add(lambda: win.destroy())
+			win.destroy()
 		del self.windows[:]
 		del self.count_labels[:]
